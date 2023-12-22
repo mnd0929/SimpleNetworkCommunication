@@ -1,4 +1,4 @@
-# BreadcrumbsSimpleNetworkCommunication
+# SimpleNetworkCommunication
 
 - Самая простая организация передачи данных по локальной сети (p2p)
 
