@@ -4,7 +4,7 @@
 
 Создание клиента с выбором IP и порта через сетевое обнаружение:
 ```csharp
-Client client = new Client(new NetworkAddress(true));
+Client client = new Client(new NetworkAddress());
 ```
 
 Создание клиента со своими IP и портом:
