@@ -178,7 +178,7 @@
             this.Controls.Add(this.label1);
             this.Controls.Add(this.button1);
             this.Name = "NetworkScanner";
-            this.Text = "NetworkScanner";
+            this.Text = "Сетевое обнаружение";
             this.Load += new System.EventHandler(this.NetworkScanner_Load);
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();

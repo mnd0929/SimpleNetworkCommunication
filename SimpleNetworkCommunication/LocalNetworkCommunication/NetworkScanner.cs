@@ -14,6 +14,7 @@ namespace SimpleNetworkCommunication
 {
     public partial class NetworkScanner : Form
     {
+        public int mainPort = 55555;
         public delegate void DeviceSelected(NetworkAddress message);
         public event DeviceSelected UserSelectedDevice;
         public NetworkScanner()
@@ -54,7 +55,7 @@ namespace SimpleNetworkCommunication
                         catch { }
                         try
                         {
-                            dataGridView1.Rows.Add(hostName, iPAddress.ToString(), "55555");
+                            dataGridView1.Rows.Add(hostName, iPAddress.ToString(), mainPort);
                         }
                         catch { }
                     }).Start();

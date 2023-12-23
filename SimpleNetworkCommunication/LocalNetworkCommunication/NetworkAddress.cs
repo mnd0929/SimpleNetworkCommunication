@@ -1,13 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Net;
 
 namespace SimpleNetworkCommunication
 {
+    /// <summary>
+    /// Представляет информацию для подключения к внешней машине
+    /// </summary>
     public class NetworkAddress
     {
         public IPAddress IP { get; set; }
@@ -15,6 +12,11 @@ namespace SimpleNetworkCommunication
         public NetworkAddress(bool AutomaticUserSelection) 
         {
             AutoSelect();
+        }
+        public NetworkAddress(IPAddress iPAddress, int port)
+        {
+            IP = iPAddress;
+            Port = port;
         }
         private async void AutoSelect()
         {
@@ -28,11 +30,6 @@ namespace SimpleNetworkCommunication
             
             IP = networkAddress.IP;
             Port = networkAddress.Port;
-        }
-        public NetworkAddress(IPAddress iPAddress, int port)
-        {
-            IP = iPAddress;
-            Port = port;
         }
     }
 }

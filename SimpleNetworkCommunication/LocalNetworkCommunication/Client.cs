@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -9,6 +10,9 @@ using System.Threading.Tasks;
 
 namespace SimpleNetworkCommunication
 {
+    /// <summary>
+    /// Сетевая роль
+    /// </summary>
     public enum NetRole 
     { 
         Server,
@@ -16,111 +20,171 @@ namespace SimpleNetworkCommunication
     }
     public class Client
     {
-        SimpleTCP.SimpleTcpClient TcpClient = new SimpleTCP.SimpleTcpClient { };
-        SimpleTCP.SimpleTcpServer TcpServer = new SimpleTCP.SimpleTcpServer { };
-        SimpleTCP.SimpleTcpServer ClientInfoServer;
-        NetworkAddress NetworkAddress;
+        /// <summary>
+        /// Клиент (НЕ null ЕСЛИ Role == Client)
+        /// </summary>
+        public SimpleTCP.SimpleTcpClient TcpClient = new SimpleTCP.SimpleTcpClient { };
 
-        public delegate void MessageReceived(string message);
+        /// <summary>
+        /// Сервер (НЕ null ЕСЛИ Role == Server)
+        /// </summary>
+        public SimpleTCP.SimpleTcpServer TcpServer = new SimpleTCP.SimpleTcpServer { };
+
+        /// <summary>
+        /// Сервер с информацией о текущей машине
+        /// </summary>
+        public SimpleTCP.SimpleTcpServer ClientInfoServer;
+
+        /// <summary>
+        /// Указывает колличество ожиданий ответа информационного сервера (по 200мс)
+        /// </summary>
+        public int NumberOfWaitsForInformationServerResponse = 4;
+
+        /// <summary>
+        /// Указывает число попыток подключения к портам информационного сервера (ClientInfoPort - InformationServerNumberConnectionAttempts)
+        /// </summary>
+        public int InformationServerNumberConnectionAttempts = 2;
+
+        /// <summary>
+        /// Порт использующийся для получения информации о текущей машине
+        /// </summary>
+        public int ClientInfoPort = 4349;
+
+        /// <summary>
+        /// Данные для подключения к внешней машине
+        /// </summary>
+        public NetworkAddress NetworkAddress;
+
+        /// <summary>
+        /// Событие, возникающее когда сервер / клиент получает сообщение
+        /// </summary>
         public event MessageReceived ScReceivedMessage;
+        public delegate void MessageReceived(string message);
 
-        NetRole Role = NetRole.Server;
+        /// <summary>
+        /// Автоматическое определение роли (клиент / сервер) в зависимости от полученной информации с информационного сервера внешней машины
+        /// </summary>
+        public bool AutoRole = true;
+
+        /// <summary>
+        /// Сетевая роль (Клиент / Сервер)
+        /// </summary>
+        public NetRole Role = NetRole.Server;
+
+        /// <summary>
+        /// Ключ использующийся для передачи данных (На всех машинах в сети он должен быть одинаковым)
+        /// </summary>
+        public string Key = "TcpClientLineContentZmx515";
+
+        /// <summary>
+        /// Отправка сообщения подключенной машине
+        /// </summary>
+        /// <param name="message">Сообщение в кодировке UTF-8</param>
         public void Send(string message)
         {
             if (Role == NetRole.Client)
-                TcpClient.WriteLine($"<TcpClientLineContentZmx515>{message}</TcpClientLineContentZmx515>");
+                TcpClient.WriteLine($"<{Key}>{message}</{Key}>");
 
             if (Role == NetRole.Server)
-                TcpServer.BroadcastLine($"<TcpClientLineContentZmx515>{message}</TcpClientLineContentZmx515>");
+                TcpServer.BroadcastLine($"<{Key}>{message}</{Key}>");
         }
+
+        /// <summary>
+        /// Выключение клиента / сервера
+        /// </summary>
         public void Disconnect()
         {
             if (Role == NetRole.Client)
+            {
                 TcpClient.Disconnect();
+                TcpClient.Dispose();
+            }
 
             if (Role == NetRole.Server)
                 TcpServer.Stop();
         }
-        public void Dispose()
-        {
-            TcpClient.Disconnect();
-            TcpClient.Dispose();
-            TcpServer.Stop();
-        }
+
+        /// <summary>
+        /// Клиент / Сервер
+        /// </summary>
+        /// <param name="networkAddress">IP и порт машины для подключения</param>
         public Client(NetworkAddress networkAddress) 
         { 
             NetworkAddress = networkAddress;
 
-            // Создание сервера ифнормации о клиенте
-            for (int i = 0; i < 2; i++)
+            if (AutoRole)
             {
-                Console.WriteLine($"Создание сервера информации о клиенте: Попытка {i}, порт {4349 - i}");
-
-                try
+                // Создание сервера ифнормации о клиенте
+                for (int i = 0; i < InformationServerNumberConnectionAttempts; i++)
                 {
-                    ClientInfoServer = new SimpleTCP.SimpleTcpServer();
-                    ClientInfoServer.ClientConnected += (_s, _e) =>
+                    Console.WriteLine($"Создание сервера информации о клиенте: Попытка {i}, порт {ClientInfoPort - i}");
+
+                    try
                     {
-                        ClientInfoServer.BroadcastLine($"<com>{NetworkAddress.Port}\\{Role}</com>");
-                    };
-                    ClientInfoServer.Start(4349 - i);
+                        ClientInfoServer = new SimpleTCP.SimpleTcpServer();
+                        ClientInfoServer.ClientConnected += (_s, _e) =>
+                        {
+                            ClientInfoServer.BroadcastLine($"<com>{NetworkAddress.Port}\\{Role}</com>");
+                        };
+                        ClientInfoServer.Start(ClientInfoPort - i);
 
-                    Console.WriteLine($"Создание сервера информации о клиенте: Успешно, попытка {i}");
+                        Console.WriteLine($"Создание сервера информации о клиенте: Успешно, попытка {i}");
 
-                    break;
-                }
-                catch { }
-            }
-
-            // Получение роли подключаемой машины
-            for (int i = 0; i < 2; i++)
-            {
-                Console.WriteLine($"Получение роли подключаемой машины: Попытка {i}, порт {4349 - i}");
-
-                try
-                {
-                    bool isDataReceived = false;
-
-                    SimpleTcpClient simpleTcpClient = new SimpleTcpClient();
-                    simpleTcpClient.DataReceived += (_s, _e) =>
-                    {
-                        string resstr = Regex.Match(_e.MessageString, @"(?<=<com>)(.*)(?=</com>)").ToString();
-                        string por = resstr.Split('\\')[0];
-                        string rol = resstr.Split('\\')[1];
-
-                        Console.WriteLine($"Получены данные: {resstr}");
-
-                        Role = NetRole.Client.ToString().Contains(rol) ? NetRole.Server : NetRole.Client;
-
-                        Console.WriteLine($"Получение роли подключаемой машины: Успешно, попытка {i}");
-
-                        isDataReceived = true;
-                    };
-                    simpleTcpClient.Connect(NetworkAddress.IP.ToString(), 4349 - i);
-
-                    for (int j = 0; j < 5; j++)
-                    {
-                        Thread.Sleep(500);
-
-                        if (isDataReceived)
-                            break;
+                        break;
                     }
-
-                    break;
+                    catch { }
                 }
-                catch { }
-            }
 
-            Console.WriteLine($"Назначенная роль: {Role}");
+                // Получение роли подключаемой машины
+                for (int i = 0; i < InformationServerNumberConnectionAttempts; i++)
+                {
+                    Console.WriteLine($"Получение роли подключаемой машины: Попытка {i}, порт {ClientInfoPort - i}");
+
+                    try
+                    {
+                        bool isDataReceived = false;
+
+                        SimpleTcpClient simpleTcpClient = new SimpleTcpClient();
+                        simpleTcpClient.DataReceived += (_s, _e) =>
+                        {
+                            string resstr = Regex.Match(_e.MessageString, @"(?<=<com>)(.*)(?=</com>)").ToString();
+                            string por = resstr.Split('\\')[0];
+                            string rol = resstr.Split('\\')[1];
+
+                            Console.WriteLine($"Получены данные: {resstr}");
+
+                            Role = NetRole.Client.ToString().Contains(rol) ? NetRole.Server : NetRole.Client;
+
+                            Console.WriteLine($"Получение роли подключаемой машины: Успешно, попытка {i}");
+
+                            isDataReceived = true;
+                        };
+                        simpleTcpClient.Connect(NetworkAddress.IP.ToString(), ClientInfoPort - i);
+
+                        for (int j = 0; j < NumberOfWaitsForInformationServerResponse; j++)
+                        {
+                            Thread.Sleep(200);
+
+                            if (isDataReceived)
+                                break;
+                        }
+
+                        break;
+                    }
+                    catch { }
+                }
+
+                Console.WriteLine($"Назначена роль: {Role}");
+            }
 
             if (Role == NetRole.Client)
             {
-                Console.WriteLine("\rЗапуск клиента...");
+                Console.WriteLine("\rЗапуск клиента:");
 
                 TcpClient.Connect(NetworkAddress.IP.ToString(), NetworkAddress.Port - 1);
                 TcpClient.DataReceived += (_s, _e) =>
                 {
-                    string resstr = Regex.Match(_e.MessageString, @"(?<=<TcpClientLineContentZmx515>)(.*)(?=</TcpClientLineContentZmx515>)").ToString();
+                    string resstr = Regex.Match(_e.MessageString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)").ToString();
                     ScReceivedMessage(resstr);
                 };
 
@@ -129,12 +193,12 @@ namespace SimpleNetworkCommunication
 
             if (Role == NetRole.Server)
             {
-                Console.Write("\rЗапуск сервера...");
+                Console.Write("\rЗапуск сервера:");
 
                 TcpServer.Start(networkAddress.Port - 1);
                 TcpServer.DataReceived += (_s, _e) =>
                 {
-                    string resstr = Regex.Match(_e.MessageString, @"(?<=<TcpClientLineContentZmx515>)(.*)(?=</TcpClientLineContentZmx515>)").ToString();
+                    string resstr = Regex.Match(_e.MessageString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)").ToString();
                     ScReceivedMessage(resstr);
                 };
 
