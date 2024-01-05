@@ -9,7 +9,7 @@ namespace SimpleNetworkCommunication
     {
         public IPAddress IP { get; set; }
         public int Port { get; set; }
-        public NetworkAddress(bool AutomaticUserSelection) 
+        public NetworkAddress() 
         {
             AutoSelect();
         }
@@ -18,13 +18,13 @@ namespace SimpleNetworkCommunication
             IP = iPAddress;
             Port = port;
         }
-        private async void AutoSelect()
+        private void AutoSelect()
         {
             NetworkScanner networkScanner = new NetworkScanner();
             NetworkAddress networkAddress = null;
             networkScanner.UserSelectedDevice += (_e) => 
             {
-                networkAddress = _e as NetworkAddress;
+                networkAddress = _e;
             };
             networkScanner.ShowDialog();
             

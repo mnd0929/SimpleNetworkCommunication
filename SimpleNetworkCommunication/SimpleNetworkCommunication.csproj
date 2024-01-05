@@ -36,6 +36,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -45,7 +46,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ColorConsole.cs" />
     <Compile Include="LocalNetworkCommunication\Client.cs" />
+    <Compile Include="LocalNetworkCommunication\ClientInfo.cs" />
     <Compile Include="LocalNetworkCommunication\NetPingers.cs" />
     <Compile Include="LocalNetworkCommunication\NetworkAddress.cs" />
     <Compile Include="LocalNetworkCommunication\NetworkScanner.cs">
@@ -81,6 +84,11 @@
     <None Include="Resources\loading-gif.gif" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Costura.Fody">
+      <Version>5.7.0</Version>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="SimpleTCP">
       <Version>1.0.24</Version>
     </PackageReference>

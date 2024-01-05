@@ -1,4 +1,6 @@
-﻿using System;
+﻿using SimpleNetworkCommunication.LocalNetworkCommunication;
+using SimpleTCP;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -6,6 +8,7 @@ using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -43,19 +46,33 @@ namespace SimpleNetworkCommunication
 
             foreach (IPAddress iPAddress in iPAddresses)
             {
+                bool isActive = true;
+                string netRole = null;
+                string hostName = "Unknown";
+
                 try
                 {
                     new Thread(() =>
                     {
-                        string hostName = "Unknown";
                         try
                         {
                             hostName = Dns.GetHostEntry(iPAddress).HostName;
                         }
                         catch { }
+
                         try
                         {
-                            dataGridView1.Rows.Add(hostName, iPAddress.ToString(), mainPort);
+                            ClientInfo clientInfo = new ClientInfo();
+                            clientInfo.GetClientInfo(iPAddress.ToString(), hostName);
+
+                            isActive = clientInfo.isActive;
+                            netRole = clientInfo.NetRole;
+                        }
+                        catch { }
+
+                        try
+                        {
+                            int i = dataGridView1.Rows.Add(hostName, iPAddress.ToString(), mainPort, isActive, netRole);
                         }
                         catch { }
                     }).Start();
@@ -65,7 +82,7 @@ namespace SimpleNetworkCommunication
 
             statusLabel.Text = null;
 
-            await Task.Delay(5000);
+            await Task.Delay(15000);
 
             button2.Enabled = true;
         }
@@ -92,7 +109,16 @@ namespace SimpleNetworkCommunication
 
         private void dataGridView1_SelectionChanged(object sender, EventArgs e)
         {
-            if (dataGridView1.SelectedRows.Count > 0) button1.Enabled = true;
+            if (dataGridView1.SelectedRows.Count > 0)
+            {
+                button1.Enabled = true;
+                button3.Enabled = dataGridView1.CurrentRow.Cells[0].Value.ToString() != "Unknown";
+            }
+            else
+            {
+                button3.Enabled = false;
+                button1.Enabled = false;
+            }
         }
 
         private void NetworkScanner_Load(object sender, EventArgs e)
@@ -102,7 +128,12 @@ namespace SimpleNetworkCommunication
 
         private void statusLabel_TextChanged(object sender, EventArgs e)
         {
-            pictureBox1.Visible = (sender as Label).Text == null;
+            pictureBox1.Visible = !string.IsNullOrWhiteSpace((sender as Label).Text);
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show(new ClientInfo().GetMashineInfo(dataGridView1.CurrentRow.Cells[0].Value.ToString()), "Информация о машине", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }

@@ -2,11 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace SimpleNetworkCommunication
 {
@@ -36,9 +38,9 @@ namespace SimpleNetworkCommunication
         public SimpleTCP.SimpleTcpServer ClientInfoServer;
 
         /// <summary>
-        /// Указывает колличество ожиданий ответа информационного сервера (по 200мс)
+        /// Указывает колличество ожиданий ответа информационного сервера (по 100мс)
         /// </summary>
-        public int NumberOfWaitsForInformationServerResponse = 4;
+        public int NumberOfWaitsForInformationServerResponse = 8;
 
         /// <summary>
         /// Указывает число попыток подключения к портам информационного сервера (ClientInfoPort - InformationServerNumberConnectionAttempts)
@@ -56,12 +58,6 @@ namespace SimpleNetworkCommunication
         public NetworkAddress NetworkAddress;
 
         /// <summary>
-        /// Событие, возникающее когда сервер / клиент получает сообщение
-        /// </summary>
-        public event MessageReceived ScReceivedMessage;
-        public delegate void MessageReceived(string message);
-
-        /// <summary>
         /// Автоматическое определение роли (клиент / сервер) в зависимости от полученной информации с информационного сервера внешней машины
         /// </summary>
         public bool AutoRole = true;
@@ -74,19 +70,69 @@ namespace SimpleNetworkCommunication
         /// <summary>
         /// Ключ использующийся для передачи данных (На всех машинах в сети он должен быть одинаковым)
         /// </summary>
-        public string Key = "TcpClientLineContentZmx515";
+        public string Key = "msg5";
 
         /// <summary>
-        /// Отправка сообщения подключенной машине
+        /// Событие, возникающее когда сервер / клиент получает сообщение
+        /// </summary>
+        public event MessageReceived ScReceivedMessage;
+        public delegate void MessageReceived(string message);
+
+        /// <summary>
+        /// Событие возникающее когда к серверу подключается клиент
+        /// </summary>
+        public event ClientConnected Connected;
+        public delegate void ClientConnected(TcpClient client);
+
+        /// <summary>
+        /// Событие возникающее когда от сервера отключается клиент
+        /// </summary>
+        public event ClientDisconnected Disconnected;
+        public delegate void ClientDisconnected(TcpClient client);
+
+        /// <summary>
+        /// Последнее полученное сообщение
+        /// </summary>
+        public SimpleTCP.Message lastMessage;
+
+        /// <summary>
+        /// Отправка сообщения подключенной / lastMessage машине
         /// </summary>
         /// <param name="message">Сообщение в кодировке UTF-8</param>
-        public void Send(string message)
+        /// <param name="isAnswer">Указывает, нужно ли отправить сообщение машине от которой было получено последнее сообщение (Работает только в случае отключенного p2p)</param>
+        public void Send(string message, bool isAnswer = false)
         {
+            if (isAnswer)
+            {
+                lastMessage?.ReplyLine($"<{Key}>{message}</{Key}>");
+                return;
+            }
+
             if (Role == NetRole.Client)
-                TcpClient.WriteLine($"<{Key}>{message}</{Key}>");
+                TcpClient?.WriteLine($"<{Key}>{message}</{Key}>");
 
             if (Role == NetRole.Server)
-                TcpServer.BroadcastLine($"<{Key}>{message}</{Key}>");
+                TcpServer?.BroadcastLine($"<{Key}>{message}</{Key}>");
+        }
+
+        /// <summary>
+        /// Отправка массива байт подключенной / lastMessage машине
+        /// </summary>
+        /// <param name="data">Массив байт</param>
+        /// <param name="isAnswer">Указывает, нужно ли отправить сообщение машине от которой было получено последнее сообщение (Работает только в случае отключенного p2p)</param>
+        public void SendData(byte[] data, bool isAnswer = false)
+        {
+            if (isAnswer)
+            {
+                lastMessage?.Reply(data);
+                return;
+            }
+
+            if (Role == NetRole.Client)
+                TcpClient?.Write(data);
+
+            if (Role == NetRole.Server)
+                TcpServer?.Broadcast(data);
         }
 
         /// <summary>
@@ -105,13 +151,10 @@ namespace SimpleNetworkCommunication
         }
 
         /// <summary>
-        /// Клиент / Сервер
+        /// Запускает сервер / клиент с заданными параметрами
         /// </summary>
-        /// <param name="networkAddress">IP и порт машины для подключения</param>
-        public Client(NetworkAddress networkAddress) 
-        { 
-            NetworkAddress = networkAddress;
-
+        public void Start()
+        {
             if (AutoRole)
             {
                 // Создание сервера ифнормации о клиенте
@@ -163,11 +206,14 @@ namespace SimpleNetworkCommunication
 
                         for (int j = 0; j < NumberOfWaitsForInformationServerResponse; j++)
                         {
-                            Thread.Sleep(200);
+                            Thread.Sleep(100);
 
                             if (isDataReceived)
                                 break;
                         }
+
+                        simpleTcpClient.Disconnect();
+                        simpleTcpClient.Dispose();
 
                         break;
                     }
@@ -188,22 +234,42 @@ namespace SimpleNetworkCommunication
                     ScReceivedMessage(resstr);
                 };
 
-                Console.Write($"\rЗапуск клиента: Успешно, клиент запущен по адресу: {networkAddress.IP}:{networkAddress.Port}\r\n");
+                Console.Write($"\rЗапуск клиента: Успешно, клиент запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
             }
 
             if (Role == NetRole.Server)
             {
                 Console.Write("\rЗапуск сервера:");
 
-                TcpServer.Start(networkAddress.Port - 1);
+                TcpServer.Start(NetworkAddress.Port - 1);
                 TcpServer.DataReceived += (_s, _e) =>
                 {
+                    lastMessage = _e;
                     string resstr = Regex.Match(_e.MessageString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)").ToString();
                     ScReceivedMessage(resstr);
                 };
+                TcpServer.ClientConnected += (_s, _e) => 
+                {
+                    Connected(_e);
+                };
+                TcpServer.ClientDisconnected += (_s, _e) =>
+                {
+                    Disconnected(_e);
+                };
 
-                Console.Write($"\rЗапуск сервера: Успешно, сервер запущен по адресу: {networkAddress.IP}:{networkAddress.Port}\r\n");
+                Console.Write($"\rЗапуск сервера: Успешно, сервер запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
             }
+        }
+
+        /// <summary>
+        /// Клиент / Сервер
+        /// </summary>
+        /// <param name="networkAddress">IP и порт машины для подключения</param>
+        /// <param name="quickStart">Указывает, выполняется ли автоматический запуск с параметрами по умолчанию</param>
+        public Client(NetworkAddress networkAddress, bool quickStart = true) 
+        { 
+            NetworkAddress = networkAddress;
+            if (quickStart) Start();
         }
     }
 }
