@@ -114,7 +114,7 @@ namespace SimpleNetworkCommunication
 
             if (AutoRole)
             {
-                // Создание сервера ифнормации о клиенте
+                // Создание сервера информации о клиенте
                 for (int i = 0; i < InformationServerNumberConnectionAttempts; i++)
                 {
                     Console.WriteLine($"Создание сервера информации о клиенте: Попытка {i}, порт {ClientInfoPort - i}");
