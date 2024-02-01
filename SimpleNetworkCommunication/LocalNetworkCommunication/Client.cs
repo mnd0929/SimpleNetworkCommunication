@@ -1,14 +1,9 @@
 ﻿using SimpleTCP;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace SimpleNetworkCommunication
 {
@@ -22,6 +17,17 @@ namespace SimpleNetworkCommunication
     }
     public class Client
     {
+        /// <summary>
+        /// Клиент / Сервер
+        /// </summary>
+        /// <param name="networkAddress">IP и порт машины для подключения</param>
+        /// <param name="quickStart">Указывает, выполняется ли автоматический запуск с параметрами по умолчанию</param>
+        public Client(NetworkAddress networkAddress, bool quickStart = true)
+        {
+            NetworkAddress = networkAddress;
+            if (quickStart) Start();
+        }
+
         /// <summary>
         /// Клиент (НЕ null ЕСЛИ Role == Client)
         /// </summary>
@@ -58,6 +64,11 @@ namespace SimpleNetworkCommunication
         public NetworkAddress NetworkAddress;
 
         /// <summary>
+        /// Указывает, будет ли сервер уведомлять о смене статуса инициализации. Используется событие NewLogReceived. Для корректной работы выключите QuickStart в конструкторе класса и запустите сервер после привязки к событиям
+        /// </summary>
+        public bool Logs = false;
+
+        /// <summary>
         /// Автоматическое определение роли (клиент / сервер) в зависимости от полученной информации с информационного сервера внешней машины
         /// </summary>
         public bool AutoRole = true;
@@ -71,6 +82,12 @@ namespace SimpleNetworkCommunication
         /// Ключ использующийся для передачи данных (На всех машинах в сети он должен быть одинаковым)
         /// </summary>
         public string Key = "msg5";
+
+        /// <summary>
+        /// Логи сервера
+        /// </summary>
+        public event ProgrammedStatusChanged NewLogReceived;
+        public delegate void ProgrammedStatusChanged(string status);
 
         /// <summary>
         /// Событие, возникающее когда сервер / клиент получает сообщение
@@ -160,7 +177,7 @@ namespace SimpleNetworkCommunication
                 // Создание сервера информации о клиенте
                 for (int i = 0; i < InformationServerNumberConnectionAttempts; i++)
                 {
-                    Console.WriteLine($"Создание сервера информации о клиенте: Попытка {i}, порт {ClientInfoPort - i}");
+                    Log($"Создание сервера информации о клиенте: Попытка {i}, порт {ClientInfoPort - i}");
 
                     try
                     {
@@ -171,7 +188,7 @@ namespace SimpleNetworkCommunication
                         };
                         ClientInfoServer.Start(ClientInfoPort - i);
 
-                        Console.WriteLine($"Создание сервера информации о клиенте: Успешно, попытка {i}");
+                        Log($"Создание сервера информации о клиенте: Успешно, попытка {i}");
 
                         break;
                     }
@@ -181,7 +198,7 @@ namespace SimpleNetworkCommunication
                 // Получение роли подключаемой машины
                 for (int i = 0; i < InformationServerNumberConnectionAttempts; i++)
                 {
-                    Console.WriteLine($"Получение роли подключаемой машины: Попытка {i}, порт {ClientInfoPort - i}");
+                    Log($"Получение роли подключаемой машины: Попытка {i}, порт {ClientInfoPort - i}");
 
                     try
                     {
@@ -194,11 +211,11 @@ namespace SimpleNetworkCommunication
                             string por = resstr.Split('\\')[0];
                             string rol = resstr.Split('\\')[1];
 
-                            Console.WriteLine($"Получены данные: {resstr}");
+                            Log($"Получены данные: {resstr}");
 
                             Role = NetRole.Client.ToString().Contains(rol) ? NetRole.Server : NetRole.Client;
 
-                            Console.WriteLine($"Получение роли подключаемой машины: Успешно, попытка {i}");
+                            Log($"Получение роли подключаемой машины: Успешно, попытка {i}");
 
                             isDataReceived = true;
                         };
@@ -220,33 +237,37 @@ namespace SimpleNetworkCommunication
                     catch { }
                 }
 
-                Console.WriteLine($"Назначена роль: {Role}");
+                Log($"Назначена роль: {Role}");
             }
 
             if (Role == NetRole.Client)
             {
-                Console.WriteLine("\rЗапуск клиента:");
+                Log("\rЗапуск клиента:");
 
                 TcpClient.Connect(NetworkAddress.IP.ToString(), NetworkAddress.Port - 1);
                 TcpClient.DataReceived += (_s, _e) =>
                 {
-                    string resstr = Regex.Match(_e.MessageString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)").ToString();
-                    ScReceivedMessage(resstr);
+                    foreach (string str in DecrypteString(_e.MessageString))
+                    {
+                        ScReceivedMessage(str);
+                    }
                 };
 
-                Console.Write($"\rЗапуск клиента: Успешно, клиент запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
+                Log($"\rЗапуск клиента: Успешно, клиент запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
             }
 
             if (Role == NetRole.Server)
             {
-                Console.Write("\rЗапуск сервера:");
+                Log("\rЗапуск сервера:");
 
                 TcpServer.Start(NetworkAddress.Port - 1);
                 TcpServer.DataReceived += (_s, _e) =>
                 {
                     lastMessage = _e;
-                    string resstr = Regex.Match(_e.MessageString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)").ToString();
-                    ScReceivedMessage(resstr);
+                    foreach (string str in DecrypteString(_e.MessageString))
+                    {
+                        ScReceivedMessage(str);
+                    }
                 };
                 TcpServer.ClientConnected += (_s, _e) => 
                 {
@@ -257,19 +278,37 @@ namespace SimpleNetworkCommunication
                     Disconnected(_e);
                 };
 
-                Console.Write($"\rЗапуск сервера: Успешно, сервер запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
+                Log($"\rЗапуск сервера: Успешно, сервер запущен по адресу: {NetworkAddress.IP}:{NetworkAddress.Port}\r\n");
+            }
+        }
+
+        public void Log(string msg)
+        {
+            try
+            {
+                NewLogReceived(msg);
+            }
+            catch 
+            {
+                throw new Exception("Ошибка вызова делегата ProgrammedStatusChanged. Получение данных о статусе сервера невозможно если запуск сервера происходит до создания события. Для предотвращения непредвиденного исключения попробуйте отключить QuickStart и запускать сервер вручную.");
             }
         }
 
         /// <summary>
-        /// Клиент / Сервер
+        /// Получает все расшифрованные строки из текущей строки полученной из потока
         /// </summary>
-        /// <param name="networkAddress">IP и порт машины для подключения</param>
-        /// <param name="quickStart">Указывает, выполняется ли автоматический запуск с параметрами по умолчанию</param>
-        public Client(NetworkAddress networkAddress, bool quickStart = true) 
-        { 
-            NetworkAddress = networkAddress;
-            if (quickStart) Start();
+        /// <param name="encryptedString">Строка из потока</param>
+        /// <returns>Коллекция строк</returns>
+        private List<string> DecrypteString(string encryptedString) 
+        {
+            List<string> result = new List<string>();
+            MatchCollection matchCollection;
+            matchCollection = Regex.Matches(encryptedString, $@"(?<=<{Key}>)(.*)(?=</{Key}>)");
+            foreach (Match match in matchCollection)
+            {
+                result.Add(match.Value);
+            }
+            return result;
         }
     }
 }

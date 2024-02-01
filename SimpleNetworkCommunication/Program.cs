@@ -2,8 +2,10 @@
 using SimpleTCP;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Security.Policy;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,130 +18,68 @@ namespace SimpleNetworkCommunication
         public static int ver = 3;
         static void Main(string[] args)
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             while (true)
             {
-                Console.WriteLine($"\r\n ** SIMPLE TCP CHAT v{ver} **" +
-                               "\r\n 1. Децентралзованная сеть (Только 2 участника чата)" +
-                               "\r\n 2. Централизованная сеть (Неограниченное колличество участников)");
+                Console.Clear();
+                Client client = new Client(new NetworkAddress(), false);
 
-                try
+                client.Logs = true;
+                client.NewLogReceived += (m) =>
                 {
-                    if (Console.ReadKey().Key == ConsoleKey.D1)
-                    {
-                        Console.Clear();
+                    Print("System: " + m);
+                };
 
-                        Client client = new Client(new NetworkAddress());
+                client.ScReceivedMessage += (m) =>
+                {
+                    Print("\r\n>> " + m);
+                };
 
-                        ColorConsole.WriteLine($"Вы вошли в чат как {client.Role}", ConsoleColor.Blue);
+                client.Start();
 
-                        if (client.Role == NetRole.Server)
-                        {
-                            client.Connected += (_c) =>
-                            {
-                                Print($"Клиент подключен", ConsoleColor.Blue);
-                            };
+                ColorConsole.WriteLine($"Вы подключились к {client.NetworkAddress.IP + ":" + client.NetworkAddress.Port} как {client.Role}", ConsoleColor.Blue);
 
-                            client.ScReceivedMessage += (_m) =>
-                            {
-                                Print($"Client > {_m}");
-                            };
-
-                            while (true)
-                            {
-                                Console.Write($"{client.Role} > ");
-
-                                try
-                                {
-                                    client.Send(Console.ReadLine());
-                                }
-                                catch
-                                {
-                                    ColorConsole.WriteLine("Ошибка отправки: 0x");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Клиент
-
-                            client.ScReceivedMessage += (_m) =>
-                            {
-                                Print($"Server > {_m}");
-                            };
-
-                            while (true)
-                            {
-                                Console.Write($"{client.Role} > ");
-                                client.Send(Console.ReadLine());
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.Clear();
-
-                        Client client = new Client(new NetworkAddress());
-
-                        if (client.Role == NetRole.Server)
-                        {
-                            Console.Write($"\r\nВведите ник: ");
-                            string name = Console.ReadLine() + " (Server)";
-
-                            Console.WriteLine($"Вы вошли в чат как {name}\r\n");
-
-                            client.Connected += (_c) =>
-                            {
-                                var ep = _c.Client.RemoteEndPoint;
-                                Print($"Клиент {ep} вошел в чат", ConsoleColor.Blue);
-                                client.Send($"Клиент {ep} вошел в чат");
-                            };
-
-                            client.Disconnected += (_c) =>
-                            {
-                                var ep = _c.Client.RemoteEndPoint;
-                                Print($"Клиент {ep} покинул чат", ConsoleColor.Blue);
-                                client.Send($"Клиент {ep} покинул чат");
-                            };
-
-                            client.ScReceivedMessage += (_m) =>
-                            {
-                                Print($"{_m}");
-                                client.Send($"{_m}");
-                            };
-
-                            while (true)
-                            {
-                                Console.Write($"{name} > ");
-                                client.Send($"{name} > {Console.ReadLine()}");
-                            }
-                        }
-                        else
-                        {
-                            // Клиент
-
-                            Console.Write($"\r\nВведите ник: ");
-                            string name = Console.ReadLine();
-
-                            Console.WriteLine($"Вы вошли в чат как {name}\r\n");
-
-                            client.ScReceivedMessage += (_m) =>
-                            {
-                                if (!_m.StartsWith(name))
-                                    Print($"{_m}");
-                            };
-
-                            while (true)
-                            {
-                                Console.Write($"{name} > ");
-                                client.Send($"{name} > {Console.ReadLine()}");
-                            }
-                        }
-                    }
+                while (true)
+                {
+                    Console.Write("> ");
+                    client.Send(Console.ReadLine());
                 }
-                catch { }
             }
         }
 
+        public static string RunCommand(string arguments, bool readOutput)
+        {
+            var output = string.Empty;
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/C " + arguments,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = false
+                };
+
+                var proc = Process.Start(startInfo);
+
+                if (readOutput)
+                {
+                    output = proc.StandardOutput.ReadToEnd();
+                }
+
+                proc.WaitForExit();
+
+                return output;
+            }
+            catch (Exception)
+            {
+                return output;
+            }
+        }
         // чтобы полученное сообщение не накладывалось на ввод нового сообщения
         public static void Print(string message, ConsoleColor foreColor = ConsoleColor.Gray)
         {
