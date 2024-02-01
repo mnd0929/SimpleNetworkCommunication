@@ -2,6 +2,8 @@
 
 - Самая простая организация передачи данных по локальной сети (p2p)
 
+Библиотека доступна [здесь](https://github.com/mnd0929/SimpleNetworkCommunicationLB) 
+
 Создание клиента с выбором IP и порта через сетевое обнаружение:
 ```csharp
 Client client = new Client(new NetworkAddress());
